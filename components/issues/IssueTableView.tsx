@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   createColumnHelper,
   flexRender,
@@ -11,12 +11,12 @@ import {
   getFilteredRowModel,
   ColumnFiltersState,
 } from '@tanstack/react-table'
-import { useState } from 'react'
 import { GitHubIssue } from '../../types'
 import { LabelBadge } from './LabelBadge'
-import { ExternalLink, GitPullRequest, MessageCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { ExternalLink, GitPullRequest, MessageCircle, ArrowUpDown, ArrowUp, ArrowDown, Brain, Loader2, Check, X } from 'lucide-react'
 import { Badge } from '../ui/badge'
 import { Input } from '../ui/input'
+import { Button } from '../ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table'
 
 interface IssueTableViewProps {
@@ -30,6 +30,63 @@ export function IssueTableView({ issues, loading }: IssueTableViewProps) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [globalFilter, setGlobalFilter] = useState('')
+  const [analyzingIssues, setAnalyzingIssues] = useState<Set<number>>(new Set())
+  const [analysisResults, setAnalysisResults] = useState<Map<number, 'success' | 'error'>>(new Map())
+
+  const analyzeIssue = async (issue: GitHubIssue) => {
+    setAnalyzingIssues(prev => new Set(prev).add(issue.id))
+    setAnalysisResults(prev => {
+      const newMap = new Map(prev)
+      newMap.delete(issue.id)
+      return newMap
+    })
+
+    try {
+      // 调用分析接口
+      const analysisResponse = await fetch('/api/issue-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issue_ID: issue.id.toString(),
+          GITHUB_ISSUE_CONTENT: `# ${issue.title}\n\n${issue.body || ''}`
+        })
+      })
+
+      if (!analysisResponse.ok) {
+        throw new Error('Analysis failed')
+      }
+
+      const analysisResult = await analysisResponse.json()
+
+      console.log("analysisResult",analysisResult)
+
+      // 保存分析结果
+      const saveResponse = await fetch('/api/issue-analysis/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issue_id: issue.id,
+          is_pull_request: issue.is_pull_request,
+          analysis: analysisResult.analysis
+        })
+      })
+
+      if (!saveResponse.ok) {
+        throw new Error('Save failed')
+      }
+
+      setAnalysisResults(prev => new Map(prev).set(issue.id, 'success'))
+    } catch (error) {
+      console.error('Error analyzing issue:', error)
+      setAnalysisResults(prev => new Map(prev).set(issue.id, 'error'))
+    } finally {
+      setAnalyzingIssues(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(issue.id)
+        return newSet
+      })
+    }
+  }
 
   const columns = useMemo(
     () => [
@@ -214,8 +271,50 @@ export function IssueTableView({ issues, loading }: IssueTableViewProps) {
           </span>
         ),
       }),
+      columnHelper.display({
+        id: 'analyze',
+        header: 'Analyze',
+        size: 100,
+        cell: ({ row }) => {
+          const issue = row.original
+          const isAnalyzing = analyzingIssues.has(issue.id)
+          const result = analysisResults.get(issue.id)
+          
+          return (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => analyzeIssue(issue)}
+              disabled={isAnalyzing}
+              className="h-8 px-3"
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  Analyzing
+                </>
+              ) : result === 'success' ? (
+                <>
+                  <Check className="w-3 h-3 mr-1 text-green-600" />
+                  Done
+                </>
+              ) : result === 'error' ? (
+                <>
+                  <X className="w-3 h-3 mr-1 text-red-600" />
+                  Retry
+                </>
+              ) : (
+                <>
+                  <Brain className="w-3 h-3 mr-1" />
+                  Analyze
+                </>
+              )}
+            </Button>
+          )
+        },
+      }),
     ],
-    []
+    [analyzingIssues, analysisResults]
   )
 
   const table = useReactTable({
