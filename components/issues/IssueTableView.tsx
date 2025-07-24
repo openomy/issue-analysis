@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
   createColumnHelper,
   flexRender,
@@ -8,30 +8,51 @@ import {
   useReactTable,
   getSortedRowModel,
   SortingState,
-  getFilteredRowModel,
-  ColumnFiltersState,
 } from '@tanstack/react-table'
-import { GitHubIssue } from '../../types'
+import { GitHubIssue, PaginationInfo } from '../../types'
 import { LabelBadge } from './LabelBadge'
-import { ExternalLink, GitPullRequest, MessageCircle, ArrowUpDown, ArrowUp, ArrowDown, Brain, Loader2, Check, X } from 'lucide-react'
+import { ExternalLink, GitPullRequest, MessageCircle, ArrowUpDown, ArrowUp, ArrowDown, Brain, Loader2, Check, X, Search } from 'lucide-react'
 import { Badge } from '../ui/badge'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
+import { Select, SelectContent, SelectItem } from '../ui/select'
+import { Pagination } from '../ui/pagination'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table'
 
 interface IssueTableViewProps {
   issues: (GitHubIssue & { github_repos?: { full_name: string; html_url: string } })[]
+  pagination?: PaginationInfo
   loading?: boolean
+  onSearch?: (search: string) => void
+  onPageChange?: (page: number) => void
+  onLimitChange?: (limit: number) => void
 }
 
 const columnHelper = createColumnHelper<GitHubIssue & { github_repos?: { full_name: string; html_url: string } }>()
 
-export function IssueTableView({ issues, loading }: IssueTableViewProps) {
+export function IssueTableView({ 
+  issues, 
+  pagination, 
+  loading, 
+  onSearch, 
+  onPageChange, 
+  onLimitChange 
+}: IssueTableViewProps) {
   const [sorting, setSorting] = useState<SortingState>([])
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
-  const [globalFilter, setGlobalFilter] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [analyzingIssues, setAnalyzingIssues] = useState<Set<number>>(new Set())
   const [analysisResults, setAnalysisResults] = useState<Map<number, 'success' | 'error'>>(new Map())
+
+  // 防抖搜索
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (onSearch) {
+        onSearch(searchInput)
+      }
+    }, 500)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchInput, onSearch])
 
   const analyzeIssue = async (issue: GitHubIssue) => {
     setAnalyzingIssues(prev => new Set(prev).add(issue.id))
@@ -48,7 +69,7 @@ export function IssueTableView({ issues, loading }: IssueTableViewProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           issue_ID: issue.id.toString(),
-          GITHUB_ISSUE_CONTENT: `# ${issue.title}\n\n${issue.body || ''}`
+          GITHUB_ISSUE_CONTENT: `# ${issue.title} \n\n${issue.body || ''}`
         })
       })
 
@@ -322,15 +343,12 @@ export function IssueTableView({ issues, loading }: IssueTableViewProps) {
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    onGlobalFilterChange: setGlobalFilter,
     state: {
       sorting,
-      columnFilters,
-      globalFilter,
     },
+    manualPagination: true, // 启用服务端分页
+    manualFiltering: true,  // 启用服务端过滤
   })
 
   if (loading) {
@@ -346,17 +364,39 @@ export function IssueTableView({ issues, loading }: IssueTableViewProps) {
 
   return (
     <div className="space-y-4">
-      {/* Search */}
-      <div className="flex items-center gap-4">
-        <Input
-          placeholder="Search issues..."
-          value={globalFilter ?? ''}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-          className="max-w-sm"
-        />
-        <span className="text-sm text-muted-foreground">
-          Showing {table.getFilteredRowModel().rows.length} of {issues.length} issues
-        </span>
+      {/* Search and Controls */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search issues..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          {pagination && (
+            <span className="text-sm text-muted-foreground">
+              Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} issues
+            </span>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Rows per page:</span>
+          <Select
+            value={pagination?.limit.toString() || '50'}
+            onValueChange={(value) => onLimitChange?.(parseInt(value))}
+          >
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="25">25</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Table */}
@@ -395,9 +435,26 @@ export function IssueTableView({ issues, loading }: IssueTableViewProps) {
         </Table>
       </div>
 
-      {table.getFilteredRowModel().rows.length === 0 && (
+      {table.getRowModel().rows.length === 0 && !loading && (
         <div className="text-center py-8 text-muted-foreground">
           No issues found matching your criteria.
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Page {pagination.page} of {pagination.totalPages}
+          </div>
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={(page) => onPageChange?.(page)}
+          />
+          <div className="text-sm text-muted-foreground">
+            Total: {pagination.total} issues
+          </div>
         </div>
       )}
     </div>

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { GitHubIssue, IssueStats } from '../../../../types'
+import { GitHubIssue, IssueStats, PaginationInfo, IssuesResponse } from '../../../../types'
 import { IssueTableView } from '../../../../components/issues/IssueTableView'
 import { Card } from '../../../../components/ui/card'
 import { Badge } from '../../../../components/ui/badge'
@@ -14,25 +14,38 @@ export default function RepoPage() {
   const repo = params.repo as string
   
   const [issues, setIssues] = useState<(GitHubIssue & { github_repos?: { full_name: string; html_url: string } })[]>([])
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null)
   const [stats, setStats] = useState<IssueStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [repoInfo, setRepoInfo] = useState<any>(null)
+  
+  // 搜索和分页参数
+  const [searchQuery, setSearchQuery] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
 
-  const fetchRepoData = async () => {
+  const fetchRepoData = useCallback(async () => {
     setLoading(true)
     try {
+      // 构建查询参数
+      const params = new URLSearchParams({
+        repo: `${owner}/${repo}`,
+        page: currentPage.toString(),
+        limit: pageSize.toString(),
+      })
+      
+      if (searchQuery) {
+        params.set('search', searchQuery)
+      }
+
       // Fetch issues for this specific repository
-      const issuesResponse = await fetch(`/api/issues?repo=${owner}/${repo}`)
-      const issuesResult = await issuesResponse.json()
+      const issuesResponse = await fetch(`/api/issues?${params}`)
+      const issuesResult: IssuesResponse = await issuesResponse.json()
       
       if (issuesResult.data) {
         setIssues(issuesResult.data)
+        setPagination(issuesResult.pagination)
       }
-
-      // Fetch repository stats
-      const statsResponse = await fetch(`/api/issues/stats?repo=${owner}/${repo}`)
-      const statsData = await statsResponse.json()
-      setStats(statsData)
 
       // Try to get repository information from the issues data
       if (issuesResult.data && issuesResult.data.length > 0) {
@@ -42,13 +55,47 @@ export default function RepoPage() {
       console.error('Error fetching repository data:', error)
     }
     setLoading(false)
-  }
+  }, [owner, repo, currentPage, pageSize, searchQuery])
+
+  const fetchStats = useCallback(async () => {
+    try {
+      // Fetch repository stats
+      const statsResponse = await fetch(`/api/issues/stats?repo=${owner}/${repo}`)
+      const statsData = await statsResponse.json()
+      setStats(statsData)
+    } catch (error) {
+      console.error('Error fetching stats:', error)
+    }
+  }, [owner, repo])
+
+  // 处理搜索
+  const handleSearch = useCallback((search: string) => {
+    setSearchQuery(search)
+    setCurrentPage(1) // 搜索时重置到第一页
+  }, [])
+
+  // 处理分页
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page)
+  }, [])
+
+  // 处理每页数量变化
+  const handleLimitChange = useCallback((limit: number) => {
+    setPageSize(limit)
+    setCurrentPage(1) // 改变每页数量时重置到第一页
+  }, [])
 
   useEffect(() => {
     if (owner && repo) {
       fetchRepoData()
     }
-  }, [owner, repo])
+  }, [fetchRepoData])
+
+  useEffect(() => {
+    if (owner && repo) {
+      fetchStats()
+    }
+  }, [fetchStats])
 
   if (loading) {
     return (
@@ -165,7 +212,14 @@ export default function RepoPage() {
         {/* Issues Table */}
         <Card className="p-6">
           <h2 className="text-xl font-semibold mb-4">Issues & Pull Requests</h2>
-          <IssueTableView issues={issues} loading={loading} />
+          <IssueTableView 
+            issues={issues} 
+            pagination={pagination || undefined}
+            loading={loading}
+            onSearch={handleSearch}
+            onPageChange={handlePageChange}
+            onLimitChange={handleLimitChange}
+          />
         </Card>
       </div>
     </div>

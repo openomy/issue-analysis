@@ -57,3 +57,17 @@ export interface SyncStatus {
   total_issues: number
   synced_issues: number
 }
+
+export interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  hasNext: boolean
+  hasPrev: boolean
+  totalPages: number
+}
+
+export interface IssuesResponse {
+  data: (GitHubIssue & { github_repos?: { full_name: string; html_url: string } })[]
+  pagination: PaginationInfo
+}

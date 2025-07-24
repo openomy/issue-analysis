@@ -9,8 +9,9 @@ export async function GET(request: NextRequest) {
   const label = searchParams.get('label')
   const repo = searchParams.get('repo')
   const author = searchParams.get('author')
+  const search = searchParams.get('search') // 新增搜索参数
   const page = parseInt(searchParams.get('page') || '1')
-  const limit = parseInt(searchParams.get('limit') || '50')
+  const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100) // 限制最大100条
   const offset = (page - 1) * limit
 
   try {
@@ -44,6 +45,11 @@ export async function GET(request: NextRequest) {
       query = query.eq('author', author)
     }
 
+    // 添加搜索功能 - 在标题、内容或作者中搜索
+    if (search) {
+      query = query.or(`title.ilike.%${search}%,body.ilike.%${search}%,author.ilike.%${search}%`)
+    }
+
     const { data: issues, error } = await query
 
     if (error) {
@@ -51,20 +57,42 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch issues' }, { status: 500 })
     }
 
-    const { data: countData, error: countError } = await supabase
+    // 构建计数查询，应用相同的过滤条件
+    let countQuery = supabase
       .from('github_issues')
       .select('*', { count: 'exact', head: true })
 
-    const totalCount = countData?.length || 0
+    if (state && state !== 'all') {
+      countQuery = countQuery.eq('state', state)
+    }
+
+    if (label) {
+      countQuery = countQuery.contains('labels', [{ name: label }])
+    }
+
+    if (repo) {
+      countQuery = countQuery.eq('github_repos.full_name', repo)
+    }
+
+    if (author) {
+      countQuery = countQuery.eq('author', author)
+    }
+
+    if (search) {
+      countQuery = countQuery.or(`title.ilike.%${search}%,body.ilike.%${search}%,author.ilike.%${search}%`)
+    }
+
+    const { count: totalCount, error: countError } = await countQuery
 
     return NextResponse.json({
       data: issues,
       pagination: {
         page,
         limit,
-        total: totalCount,
-        hasNext: offset + limit < totalCount,
-        hasPrev: page > 1
+        total: totalCount || 0,
+        hasNext: offset + limit < (totalCount || 0),
+        hasPrev: page > 1,
+        totalPages: Math.ceil((totalCount || 0) / limit)
       }
     })
 
