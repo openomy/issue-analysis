@@ -6,7 +6,7 @@ import { GitHubIssue, IssueStats, PaginationInfo, IssuesResponse } from '../../.
 import { IssueTableView } from '../../../../components/issues/IssueTableView'
 import { Card } from '../../../../components/ui/card'
 import { Badge } from '../../../../components/ui/badge'
-import { GitBranch, ExternalLink, Users, GitPullRequest, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { GitBranch, ExternalLink, Users, GitPullRequest, AlertCircle, CheckCircle2, Database, Loader2 } from 'lucide-react'
 
 export default function RepoPage() {
   const params = useParams()
@@ -23,6 +23,8 @@ export default function RepoPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysisMessage, setAnalysisMessage] = useState('')
 
   const fetchRepoData = useCallback(async () => {
     setLoading(true)
@@ -85,6 +87,39 @@ export default function RepoPage() {
     setCurrentPage(1) // 改变每页数量时重置到第一页
   }, [])
 
+  // 处理历史数据解析
+  const handleAnalyzeHistoricalData = useCallback(async () => {
+    setIsAnalyzing(true)
+    setAnalysisMessage('开始解析历史数据...')
+    
+    try {
+      const response = await fetch('/api/analyze-historical-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          repo: `${owner}/${repo}`
+        })
+      })
+      
+      const result = await response.json()
+      
+      if (response.ok) {
+        setAnalysisMessage(`解析完成！处理了 ${result.processedCount} 条数据，创建了 ${result.weeksCreated} 个周期记录。`)
+      } else {
+        setAnalysisMessage(`解析失败：${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error analyzing historical data:', error)
+      setAnalysisMessage('解析失败：网络错误或服务器错误')
+    } finally {
+      setIsAnalyzing(false)
+      // 5秒后清除消息
+      setTimeout(() => setAnalysisMessage(''), 5000)
+    }
+  }, [owner, repo])
+
   useEffect(() => {
     if (owner && repo) {
       fetchRepoData()
@@ -132,6 +167,35 @@ export default function RepoPage() {
                   View on GitHub
                   <ExternalLink className="w-4 h-4" />
                 </a>
+              )}
+            </div>
+            
+            {/* 解析历史数据按钮 */}
+            <div className="flex flex-col items-end gap-2">
+              <button
+                onClick={handleAnalyzeHistoricalData}
+                disabled={isAnalyzing}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+              >
+                {isAnalyzing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Database className="w-4 h-4" />
+                )}
+                {isAnalyzing ? '解析中...' : '解析历史数据'}
+              </button>
+              
+              {/* 状态消息 */}
+              {analysisMessage && (
+                <div className={`text-sm px-3 py-2 rounded-lg ${
+                  analysisMessage.includes('失败') 
+                    ? 'bg-red-100 text-red-700' 
+                    : analysisMessage.includes('完成')
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {analysisMessage}
+                </div>
               )}
             </div>
           </div>
