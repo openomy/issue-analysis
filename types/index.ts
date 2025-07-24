@@ -22,7 +22,7 @@ export interface GitHubIssue {
   title: string
   body?: string
   state: 'open' | 'closed'
-  labels: Label[]
+  labels: Label[] | string[] | unknown
   assignee?: string
   assignees: string[]
   milestone?: string

@@ -30,13 +30,13 @@ export async function syncOneIssue(): Promise<boolean> {
       repo_id: repoData.id,
       url: issue.url,
       title: issue.title,
-      body: issue.body || null,
+      body: issue.body || undefined,
       state: issue.state as 'open' | 'closed',
       labels: issue.labels,
       is_pull_request: !!issue.pull_request,
-      pr_url: issue.pull_request?.html_url || null,
+      pr_url: issue.pull_request?.html_url || undefined,
       created_at: issue.created_at,
-      closed_at: issue.closed_at
+      closed_at: issue.closed_at || undefined,
     }
 
     console.log("issueData",issueData)

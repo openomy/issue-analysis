@@ -78,13 +78,13 @@ export function IssueTable({ issues, loading }: IssueTableProps) {
                 )}
               </div>
               
-              {issue.labels && issue.labels.length > 0 && (
+              {issue.labels && Array.isArray(issue.labels) && issue.labels.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
-                  {issue.labels.map((label) => (
-                    <LabelBadge key={label.id} label={label} />
+                  {issue.labels.map((label: any) => (
+                    <LabelBadge key={label.id || label.name} label={label} />
                   ))}
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         </Card>

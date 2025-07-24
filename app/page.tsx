@@ -250,6 +250,9 @@ export default function Home() {
               <p className="text-gray-600 mt-1">
                 Track and analyze GitHub issues across multiple repositories
               </p>
+              <p className="text-sm text-blue-600 mt-2">
+                Visit <code>/github/owner/repo</code> to view issues for a specific repository (e.g., <a href="/github/lobehub/lobe-chat" className="underline">/github/lobehub/lobe-chat</a>)
+              </p>
             </div>
             
             <div className="flex gap-2 flex-wrap">

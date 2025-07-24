@@ -1,12 +1,44 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '../../../../lib/supabase'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const repo = searchParams.get('repo')
   try {
+    // For repo filtering, we need to use joins properly
+    let repoId: number | null = null
+    if (repo) {
+      // First get the repo_id for this repository
+      const { data: repoData, error: repoError } = await supabase
+        .from('github_repos')
+        .select('id')
+        .eq('full_name', repo)
+        .single()
+      
+      if (repoError || !repoData) {
+        return NextResponse.json({
+          total: 0,
+          open: 0,
+          closed: 0,
+          pull_requests: 0,
+          by_label: {},
+          by_repo: {}
+        })
+      }
+      
+      repoId = repoData.id
+    }
+
     // Get total count
-    const { count: totalCount, error: countError } = await supabase
+    let totalQuery = supabase
       .from('github_issues')
       .select('*', { count: 'exact', head: true })
+    
+    if (repoId) {
+      totalQuery = totalQuery.eq('repo_id', repoId)
+    }
+
+    const { count: totalCount, error: countError } = await totalQuery
 
     if (countError) {
       console.error('Error fetching total count:', countError)
@@ -14,20 +46,38 @@ export async function GET() {
     }
 
     // Get counts by state
-    const { count: openCount, error: openError } = await supabase
+    let openQuery = supabase
       .from('github_issues')
       .select('*', { count: 'exact', head: true })
       .eq('state', 'open')
+    
+    if (repoId) {
+      openQuery = openQuery.eq('repo_id', repoId)
+    }
 
-    const { count: closedCount, error: closedError } = await supabase
+    const { count: openCount, error: openError } = await openQuery
+
+    let closedQuery = supabase
       .from('github_issues')
       .select('*', { count: 'exact', head: true })
       .eq('state', 'closed')
+    
+    if (repoId) {
+      closedQuery = closedQuery.eq('repo_id', repoId)
+    }
 
-    const { count: prCount, error: prError } = await supabase
+    const { count: closedCount, error: closedError } = await closedQuery
+
+    let prQuery = supabase
       .from('github_issues')
       .select('*', { count: 'exact', head: true })
       .eq('is_pull_request', true)
+    
+    if (repoId) {
+      prQuery = prQuery.eq('repo_id', repoId)
+    }
+
+    const { count: prCount, error: prError } = await prQuery
 
     if (openError || closedError || prError) {
       console.error('Error fetching counts:', { openError, closedError, prError })
@@ -35,7 +85,7 @@ export async function GET() {
     }
 
     // Get sample data for labels and repos aggregation (with limit for performance)
-    const { data: issues, error } = await supabase
+    let issuesQuery = supabase
       .from('github_issues')
       .select(`
         labels,
@@ -44,6 +94,12 @@ export async function GET() {
         )
       `)
       .limit(10000)
+    
+    if (repoId) {
+      issuesQuery = issuesQuery.eq('repo_id', repoId)
+    }
+
+    const { data: issues, error } = await issuesQuery
 
     if (error) {
       console.error('Error fetching issue data for aggregation:', error)
