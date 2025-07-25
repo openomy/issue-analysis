@@ -24,7 +24,7 @@ export function Select({ value, onValueChange, children }: SelectProps) {
   }, [])
 
   const selectedChild = React.Children.toArray(children).find((child) => {
-    return React.isValidElement(child) && (child.props as any)?.value === value
+    return React.isValidElement(child) && (child.props as {value?: string})?.value === value
   }) as React.ReactElement
 
   return (
@@ -36,7 +36,7 @@ export function Select({ value, onValueChange, children }: SelectProps) {
         )}
         onClick={() => setIsOpen(!isOpen)}
       >
-        <span>{(selectedChild?.props as any)?.children || "Select..."}</span>
+        <span>{(selectedChild?.props as {children?: React.ReactNode})?.children || "Select..."}</span>
         <ChevronDown className="h-4 w-4 opacity-50" />
       </button>
       
@@ -65,7 +65,7 @@ interface SelectItemProps {
   onClick?: () => void
 }
 
-export function SelectItem({ value, children, onClick }: SelectItemProps) {
+export function SelectItem({ children, onClick }: SelectItemProps) {
   return (
     <div
       className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none hover:bg-accent hover:text-accent-foreground"

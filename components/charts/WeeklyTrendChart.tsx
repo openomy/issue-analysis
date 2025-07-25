@@ -66,13 +66,13 @@ export function WeeklyTrendChart({ data, type, title, loading = false }: WeeklyT
     }
   })
 
-  const handleBarClick = (data: any) => {
+  const handleBarClick = (data: {payload: WeeklyData}) => {
     const weekData = data.payload
     setSelectedWeek(weekData)
     setIsModalOpen(true)
   }
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload }: {active?: boolean, payload?: Array<{payload: WeeklyData}>}) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload
       const count = type === 'issues' ? data.issues_count : data.prs_count
@@ -108,7 +108,7 @@ export function WeeklyTrendChart({ data, type, title, loading = false }: WeeklyT
           <div className="text-center">
             {type === 'issues' ? <GitBranch className="w-12 h-12 mx-auto mb-4 text-gray-400" /> : <GitPullRequest className="w-12 h-12 mx-auto mb-4 text-gray-400" />}
             <p>No data available</p>
-            <p className="text-sm mt-2">Run "解析历史数据" first to generate trend data</p>
+            <p className="text-sm mt-2">Run &quot;解析历史数据&quot; first to generate trend data</p>
           </div>
         </div>
       </Card>

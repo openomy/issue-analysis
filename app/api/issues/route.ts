@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '../../../lib/supabase'
-import { GitHubIssue } from '../../../types'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -82,7 +81,7 @@ export async function GET(request: NextRequest) {
       countQuery = countQuery.or(`title.ilike.%${search}%,body.ilike.%${search}%,author.ilike.%${search}%`)
     }
 
-    const { count: totalCount, error: countError } = await countQuery
+    const { count: totalCount } = await countQuery
 
     return NextResponse.json({
       data: issues,

@@ -16,7 +16,7 @@ export interface GitHubRepo {
 export interface GitHubIssue {
   id: number
   repo_id: number
-  number: number
+  number?: number
   url: string
   html_url: string
   title: string
@@ -36,7 +36,7 @@ export interface GitHubIssue {
 }
 
 export interface Label {
-  id: number
+  id: string | undefined
   name: string
   color: string
   description?: string

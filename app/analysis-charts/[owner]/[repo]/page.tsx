@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { GitBranch, ExternalLink, BarChart3 } from 'lucide-react'
+import { ExternalLink, BarChart3 } from 'lucide-react'
 import { IssuePRPieChart, ChartData } from '../../../../components/charts/IssuePRPieChart'
 import { WeeklyTrendChart, WeeklyData } from '../../../../components/charts/WeeklyTrendChart'
 
@@ -15,7 +15,7 @@ export default function AnalysisChartsPage() {
   const [weeklyData, setWeeklyData] = useState<WeeklyData[]>([])
   const [loading, setLoading] = useState(true)
   const [weeklyLoading, setWeeklyLoading] = useState(true)
-  const [repoInfo, setRepoInfo] = useState<any>(null)
+  const [repoInfo, setRepoInfo] = useState<{html_url: string} | null>(null)
 
   const fetchChartData = useCallback(async () => {
     setLoading(true)
@@ -64,7 +64,7 @@ export default function AnalysisChartsPage() {
       fetchWeeklyData()
       fetchRepoInfo()
     }
-  }, [fetchChartData, fetchWeeklyData, fetchRepoInfo])
+  }, [owner, repo, fetchChartData, fetchWeeklyData, fetchRepoInfo])
 
   if (loading && !chartData) {
     return (

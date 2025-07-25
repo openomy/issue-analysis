@@ -116,13 +116,13 @@ export async function GET(request: NextRequest) {
     }
 
     issues.forEach(issue => {
-      const repoName = (issue as any).github_repos?.full_name
+      const repoName = (issue as {github_repos?: {full_name: string}}).github_repos?.full_name
       if (repoName) {
         stats.by_repo[repoName] = (stats.by_repo[repoName] || 0) + 1
       }
 
       if (issue.labels && Array.isArray(issue.labels)) {
-        issue.labels.forEach((label: any) => {
+        issue.labels.forEach((label: {name?: string}) => {
           if (label.name) {
             stats.by_label[label.name] = (stats.by_label[label.name] || 0) + 1
           }

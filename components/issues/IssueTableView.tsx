@@ -232,7 +232,7 @@ export function IssueTableView({
           }
           return (
             <div className="flex flex-wrap gap-1 max-w-[200px]">
-              {labels.slice(0, 3).map((label: any) => (
+              {labels.slice(0, 3).map((label: {id: string, name: string, color: string}) => (
                 <LabelBadge key={label.id || label.name} label={label} />
               ))}
               {labels.length > 3 && (

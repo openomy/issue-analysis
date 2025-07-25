@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   const repo = searchParams.get('repo')
   
   try {
-    let query = `
+    const query = `
       id,
       repo_id,
       github_repos!inner(full_name)

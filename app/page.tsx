@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { GitHubIssue, IssueStats } from '../types'
 import { IssueTable } from '../components/issues/IssueTable'
 import { IssueStatsComponent } from '../components/issues/IssueStats'
@@ -214,7 +215,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchIssues(filters)
-  }, [])
+  }, [filters])
 
   useEffect(() => {
     fetchStats()
@@ -230,7 +231,7 @@ export default function Home() {
         clearInterval(smartSyncInterval)
       }
     }
-  }, [])
+  }, [autoSyncInterval, smartSyncInterval])
 
   const handleFilterChange = (newFilters: FilterState) => {
     setFilters(newFilters)
@@ -251,7 +252,7 @@ export default function Home() {
                 Track and analyze GitHub issues across multiple repositories
               </p>
               <p className="text-sm text-blue-600 mt-2">
-                Visit <code>/github/owner/repo</code> to view issues for a specific repository (e.g., <a href="/github/lobehub/lobe-chat" className="underline">/github/lobehub/lobe-chat</a>)
+                Visit <code>/github/owner/repo</code> to view issues for a specific repository (e.g., <Link href="/github/lobehub/lobe-chat" className="underline">/github/lobehub/lobe-chat</Link>)
               </p>
             </div>
             
