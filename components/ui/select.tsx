@@ -44,8 +44,10 @@ export function Select({ value, onValueChange, children }: SelectProps) {
         <div className="absolute top-full z-50 mt-1 w-full rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
           {React.Children.map(children, (child) => {
             if (React.isValidElement(child)) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               return React.cloneElement(child as React.ReactElement<any>, {
                 onClick: () => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   onValueChange((child.props as any).value)
                   setIsOpen(false)
                 }
