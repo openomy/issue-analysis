@@ -86,7 +86,6 @@ CREATE TABLE github_repos (
   name TEXT NOT NULL,
   full_name TEXT NOT NULL UNIQUE,
   owner TEXT NOT NULL,
-  html_url TEXT NOT NULL,
   description TEXT,
   created_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL,
@@ -100,9 +99,7 @@ CREATE TABLE github_repos (
 CREATE TABLE github_issues (
   id BIGINT PRIMARY KEY,
   repo_id BIGINT REFERENCES github_repos(id),
-  number INTEGER NOT NULL,
   url TEXT NOT NULL,
-  html_url TEXT NOT NULL,
   title TEXT NOT NULL,
   body TEXT,
   state TEXT NOT NULL CHECK (state IN ('open', 'closed')),
