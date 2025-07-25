@@ -24,6 +24,7 @@ import {
   Pause,
   Play,
   GitBranch,
+  RotateCcw,
 } from "lucide-react";
 
 export default function RepoPage() {
@@ -54,6 +55,9 @@ export default function RepoPage() {
     current: number;
     total: number;
     currentRepo?: string;
+    successCount?: number;
+    errorCount?: number;
+    status?: string;
   } | null>(null);
   const [batchMessage, setBatchMessage] = useState("");
 
@@ -328,7 +332,48 @@ export default function RepoPage() {
       console.error("Error resuming batch analysis:", error);
       setBatchMessage("恢复失败：网络错误或服务器错误");
     }
-  }, [owner, repo]);
+  }, [owner, repo, startStatusPolling]);
+
+  // 重试失败的项目
+  const handleRetryFailedItems = useCallback(async () => {
+    try {
+      setBatchMessage("正在重试失败的项目...");
+
+      const response = await fetch("/api/batch-analysis", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          repo: `${owner}/${repo}`,
+          action: "retry",
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        if (result.retriedCount > 0) {
+          setBatchMessage(
+            `已重试 ${result.retriedCount} 个失败的项目，正在重新处理...`
+          );
+          setIsBatchAnalyzing(true);
+          // 开始轮询状态
+          startStatusPolling();
+        } else {
+          setBatchMessage("没有发现失败的项目需要重试");
+          setTimeout(() => setBatchMessage(""), 3000);
+        }
+      } else {
+        setBatchMessage(`重试失败：${result.error}`);
+        setTimeout(() => setBatchMessage(""), 5000);
+      }
+    } catch (error) {
+      console.error("Error retrying failed items:", error);
+      setBatchMessage("重试失败：网络错误或服务器错误");
+      setTimeout(() => setBatchMessage(""), 5000);
+    }
+  }, [owner, repo, startStatusPolling]);
 
   // 检查批量分析状态
   const checkBatchAnalysisStatus = useCallback(async () => {
@@ -459,7 +504,7 @@ export default function RepoPage() {
                       </>
                     );
                   } else if (currentStatus === "paused") {
-                    // 暂停中：显示继续和取消按钮
+                    // 暂停中：显示继续、重试失败和取消按钮
                     return (
                       <>
                         <button
@@ -470,6 +515,17 @@ export default function RepoPage() {
                           <Play className="w-4 h-4" />
                           继续分析
                         </button>
+                        {/* 重试失败项目按钮 - 只在有失败项目时显示 */}
+                        { (
+                          <button
+                            onClick={handleRetryFailedItems}
+                            disabled={isAnalyzing || isBatchAnalyzing}
+                            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            重试失败
+                          </button>
+                        )}
                         <button
                           onClick={handleCancelBatchAnalysis}
                           disabled={isAnalyzing}
@@ -481,16 +537,29 @@ export default function RepoPage() {
                       </>
                     );
                   } else {
-                    // 默认状态：显示开始按钮
+                    // 默认状态或已完成状态：显示开始按钮和重试按钮（如果有失败项目）
                     return (
-                      <button
-                        onClick={handleBatchAnalysis}
-                        disabled={isAnalyzing}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                      >
-                        <Brain className="w-4 h-4" />
-                        全量AI打标分析
-                      </button>
+                      <>
+                        <button
+                          onClick={handleBatchAnalysis}
+                          disabled={isAnalyzing}
+                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                          <Brain className="w-4 h-4" />
+                          全量AI打标分析
+                        </button>
+                        {/* 重试失败项目按钮 - 只在有失败项目时显示 */}
+                        {batchAnalysisStatus?.errorCount && batchAnalysisStatus.errorCount > 0 && (
+                          <button
+                            onClick={handleRetryFailedItems}
+                            disabled={isAnalyzing || isBatchAnalyzing}
+                            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            重试失败 ({batchAnalysisStatus.errorCount})
+                          </button>
+                        )}
+                      </>
                     );
                   }
                 })()}

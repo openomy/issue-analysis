@@ -102,9 +102,11 @@ export async function POST(request: NextRequest) {
         return await pauseBatchAnalysis(repo)
       case 'resume':
         return await resumeBatchAnalysis(repo)
+      case 'retry':
+        return await retryFailedItems(repo)
       default:
         return NextResponse.json(
-          { error: 'Invalid action. Use: start, status, cancel, pause, or resume' },
+          { error: 'Invalid action. Use: start, status, cancel, pause, resume, or retry' },
           { status: 400 }
         )
     }
@@ -520,6 +522,135 @@ async function resumeBatchAnalysis(repo: string) {
   }
 }
 
+async function retryFailedItems(repo: string) {
+  try {
+    console.log(`🔄 [BATCH-RETRY] Starting retry for failed items in repo: ${repo}`)
+    
+    // Get current status to check for failed items
+    const currentStatus = await redis.get(`${BATCH_STATUS_KEY}:${repo}`)
+    if (!currentStatus) {
+      return NextResponse.json({
+        error: 'No batch analysis found for this repository'
+      }, { status: 404 })
+    }
+
+    const status = safeJsonParse(currentStatus) as {
+      status: string
+      totalCount: number
+      processedCount: number
+      successCount: number
+      errorCount: number
+      errors?: Array<{
+        issue_id: number
+        issue_number: number
+        error: string
+        timestamp: string
+      }>
+    }
+    if (!status) {
+      return NextResponse.json({
+        error: 'Failed to parse status data'
+      }, { status: 500 })
+    }
+
+    // Check if there are failed items to retry
+    if (!status.errors || status.errors.length === 0) {
+      return NextResponse.json({
+        message: 'No failed items found to retry',
+        errorCount: 0
+      })
+    }
+
+    console.log(`📊 [BATCH-RETRY] Found ${status.errors.length} failed items to retry`)
+
+    // Get the original issues data for failed items
+    const failedIssueIds = status.errors.map(error => error.issue_id)
+    console.log(`🔍 [BATCH-RETRY] Fetching original data for failed issue IDs: ${failedIssueIds.join(', ')}`)
+
+    const { data: failedIssues, error: fetchError } = await supabase
+      .from('github_issues')
+      .select(`
+        id,
+        title,
+        body,
+        is_pull_request,
+        github_repos!inner(full_name)
+      `)
+      .in('id', failedIssueIds)
+      .eq('github_repos.full_name', repo)
+
+    if (fetchError) {
+      console.error(`💥 [BATCH-RETRY] Error fetching failed issues:`, fetchError)
+      return NextResponse.json(
+        { error: 'Failed to fetch failed issues from database' },
+        { status: 500 }
+      )
+    }
+
+    if (!failedIssues || failedIssues.length === 0) {
+      console.log(`❌ [BATCH-RETRY] No failed issues found in database for retry`)
+      return NextResponse.json({
+        message: 'No failed issues found in database for retry',
+        requestedCount: failedIssueIds.length
+      })
+    }
+
+    console.log(`📦 [BATCH-RETRY] Preparing ${failedIssues.length} items for retry`)
+
+    // Create queue items for failed issues
+    const retryQueueItems = failedIssues.map(issue => JSON.stringify({
+      issue_id: issue.id,
+      // @ts-ignore
+      issue_number: issue?.number,
+      title: issue.title,
+      body: issue.body || '',
+      // @ts-ignore
+      html_url: issue?.html_url,
+      is_pull_request: issue.is_pull_request,
+      repo: repo
+    }))
+
+    // Add retry items to the front of the queue
+    console.log(`📤 [BATCH-RETRY] Adding ${retryQueueItems.length} items to the front of the queue`)
+    if (retryQueueItems.length > 0) {
+      await redis.lpush(`${BATCH_QUEUE_KEY}:${repo}`, ...retryQueueItems)
+    }
+
+    // Clear the errors from status and adjust counts
+    status.errors = []
+    status.errorCount = Math.max(0, status.errorCount - failedIssues.length)
+    status.processedCount = Math.max(0, status.processedCount - failedIssues.length)
+
+    // If not currently running, set to running to process the retry items
+    if (status.status !== 'running') {
+      status.status = 'running'
+      console.log(`🏃 [BATCH-RETRY] Starting background processing for retry items`)
+      processBatchQueue(repo)
+    }
+
+    await redis.set(
+      `${BATCH_STATUS_KEY}:${repo}`,
+      JSON.stringify(status),
+      { ex: 86400 }
+    )
+
+    console.log(`✅ [BATCH-RETRY] Successfully queued ${failedIssues.length} failed items for retry`)
+
+    return NextResponse.json({
+      message: `Successfully queued ${failedIssues.length} failed items for retry`,
+      retriedCount: failedIssues.length,
+      remainingErrors: status.errors.length
+    })
+
+  } catch (error) {
+    console.error('Retry failed items error:', error)
+    return NextResponse.json(
+      { error: 'Failed to retry failed items' },
+      { status: 500 }
+    )
+  }
+}
+
 // Background processing function
 async function processBatchQueue(repo: string) {
   console.log(`🔄 [BATCH-PROCESS] Starting background processing for repo: ${repo}`)
@@ -621,7 +752,7 @@ async function processBatchQueue(repo: string) {
       while (retryCount < maxRetries && !success) {
         try {
           // Call the issue analysis API
-          const analysisResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/issue-analysis`, {
+          const analysisResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3002'}/api/issue-analysis`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -639,7 +770,7 @@ async function processBatchQueue(repo: string) {
           const analysisResult = await analysisResponse.json()
 
           // Save the analysis result
-          const saveResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/issue-analysis/save`, {
+          const saveResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3002'}/api/issue-analysis/save`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
