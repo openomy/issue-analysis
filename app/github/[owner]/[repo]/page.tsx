@@ -60,6 +60,17 @@ export default function RepoPage() {
     status?: string;
   } | null>(null);
   const [batchMessage, setBatchMessage] = useState("");
+  
+  // 10x并行分析状态
+  const [is10xAnalyzing, setIs10xAnalyzing] = useState(false);
+  const [batchAnalysis10xStatus, setBatchAnalysis10xStatus] = useState<{
+    processedCount: number;
+    totalCount: number;
+    successCount?: number;
+    errorCount?: number;
+    status?: string;
+  } | null>(null);
+  const [batch10xMessage, setBatch10xMessage] = useState("");
 
   const fetchRepoData = useCallback(async () => {
     setLoading(true);
@@ -421,13 +432,215 @@ export default function RepoPage() {
     }
   }, [owner, repo]);
 
+  // 10x并行分析相关函数
+  const handle10xBatchAnalysis = useCallback(async () => {
+    setIs10xAnalyzing(true);
+    setBatch10xMessage("正在启动10x并行AI分析...");
+
+    try {
+      const response = await fetch("/api/batch-analysis-10x", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          repo: `${owner}/${repo}`,
+          action: "start",
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        if (result.needAnalysis === 0) {
+          // All issues already analyzed
+          setBatch10xMessage(
+            `所有 ${result.totalCount} 个issues都已分析完成，无需重复处理`
+          );
+          setIs10xAnalyzing(false);
+          setTimeout(() => setBatch10xMessage(""), 5000);
+        } else if (result.alreadyAnalyzedCount > 0) {
+          setBatch10xMessage(
+            `10x分析已启动！需要处理 ${result.totalCount} 个issues，跳过 ${result.alreadyAnalyzedCount} 个已分析，使用10个并发任务`
+          );
+          // 开始轮询状态
+          start10xStatusPolling();
+        } else {
+          setBatch10xMessage(
+            `10x分析已启动！总共 ${result.totalCount} 个issues需要处理，使用10个并发任务`
+          );
+          // 开始轮询状态
+          start10xStatusPolling();
+        }
+      } else {
+        setBatch10xMessage(`启动失败：${result.error}`);
+        setIs10xAnalyzing(false);
+      }
+    } catch (error) {
+      console.error("Error starting 10x batch analysis:", error);
+      setBatch10xMessage("启动失败：网络错误或服务器错误");
+      setIs10xAnalyzing(false);
+    }
+  }, [owner, repo]);
+
+  // 10x分析状态轮询
+  const start10xStatusPolling = useCallback(() => {
+    const pollStatus = async () => {
+      try {
+        const response = await fetch("/api/batch-analysis-10x", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            repo: `${owner}/${repo}`,
+            action: "status",
+          }),
+        });
+
+        const status = await response.json();
+        setBatchAnalysis10xStatus(status);
+
+        if (status.status === "running") {
+          setBatch10xMessage(
+            `10x并行处理中：${status.processedCount}/${status.totalCount} (成功：${status.successCount}, 错误：${status.errorCount})`
+          );
+          // 继续轮询
+          setTimeout(pollStatus, 1000);
+        } else if (status.status === "completed") {
+          setBatch10xMessage(
+            `10x分析完成！处理了 ${status.processedCount} 个issues，成功 ${status.successCount} 个，错误 ${status.errorCount} 个`
+          );
+          setIs10xAnalyzing(false);
+          // 5秒后清除消息
+          setTimeout(() => setBatch10xMessage(""), 8000);
+        } else if (status.status === "cancelled") {
+          setBatch10xMessage("10x分析已取消");
+          setIs10xAnalyzing(false);
+          setTimeout(() => setBatch10xMessage(""), 5000);
+        }
+      } catch (error) {
+        console.error("Error polling 10x status:", error);
+        setBatch10xMessage("10x状态检查失败，但分析可能仍在进行中");
+        setIs10xAnalyzing(false);
+      }
+    };
+
+    // 立即开始第一次轮询
+    setTimeout(pollStatus, 500);
+  }, [owner, repo]);
+
+  // 取消10x分析
+  const handleCancel10xBatchAnalysis = useCallback(async () => {
+    try {
+      const response = await fetch("/api/batch-analysis-10x", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          repo: `${owner}/${repo}`,
+          action: "cancel",
+        }),
+      });
+
+      if (response.ok) {
+        setBatch10xMessage("正在取消10x分析...");
+      }
+    } catch (error) {
+      console.error("Error cancelling 10x batch analysis:", error);
+    }
+  }, [owner, repo]);
+
+  // 继续10x分析（从暂停状态恢复）
+  const handleResume10xBatchAnalysis = useCallback(async () => {
+    try {
+      setBatch10xMessage("正在恢复10x分析...");
+
+      const response = await fetch("/api/batch-analysis-10x", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          repo: `${owner}/${repo}`,
+          action: "resume",
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setBatch10xMessage(
+          `10x分析已恢复！将从 ${result.processedCount}/${result.totalCount} 继续，剩余 ${result.remainingCount} 个`
+        );
+        setIs10xAnalyzing(true);
+        // 开始轮询状态
+        start10xStatusPolling();
+      } else {
+        setBatch10xMessage(`恢复失败：${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error resuming 10x batch analysis:", error);
+      setBatch10xMessage("恢复失败：网络错误或服务器错误");
+    }
+  }, [owner, repo, start10xStatusPolling]);
+
+  // 检查10x分析状态
+  const check10xBatchAnalysisStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/batch-analysis-10x", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          repo: `${owner}/${repo}`,
+          action: "status",
+        }),
+      });
+
+      const status = await response.json();
+
+      if (response.ok && status.status !== "not_started") {
+        setBatchAnalysis10xStatus(status);
+
+        if (status.status === "running") {
+          console.log("🔄 检测到正在进行的10x分析，恢复状态和轮询");
+          setBatch10xMessage(
+            `10x并行处理中：${status.processedCount}/${status.totalCount} (成功：${status.successCount}, 错误：${status.errorCount})`
+          );
+          setIs10xAnalyzing(true);
+          // 如果是运行状态，开始轮询
+          start10xStatusPolling();
+        } else if (status.status === "paused") {
+          console.log("🔄 检测到暂停的10x分析，恢复暂停状态");
+          setBatch10xMessage(
+            `10x分析已暂停：${status.processedCount}/${status.totalCount} (成功：${status.successCount}, 错误：${status.errorCount})`
+          );
+          setIs10xAnalyzing(false);
+        } else if (status.status === "completed") {
+          console.log("🔄 检测到已完成的10x分析");
+          setBatch10xMessage(
+            `10x分析完成！处理了 ${status.processedCount} 个issues，成功 ${status.successCount} 个，错误 ${status.errorCount} 个`
+          );
+          setIs10xAnalyzing(false);
+        }
+      }
+    } catch (error) {
+      console.error("Error checking 10x batch analysis status:", error);
+    }
+  }, [owner, repo, start10xStatusPolling]);
+
   useEffect(() => {
     if (owner && repo) {
       fetchRepoData();
       // 检查是否有正在进行的批量分析
       checkBatchAnalysisStatus();
+      // 检查是否有正在进行的10x分析
+      check10xBatchAnalysisStatus();
     }
-  }, [owner, repo, fetchRepoData, checkBatchAnalysisStatus]);
+  }, [owner, repo, fetchRepoData, checkBatchAnalysisStatus, check10xBatchAnalysisStatus]);
 
   useEffect(() => {
     if (owner && repo) {
@@ -480,14 +693,31 @@ export default function RepoPage() {
                 {(() => {
                   // @ts-ignore
                   const currentStatus = batchAnalysisStatus?.status;
+                  // @ts-ignore
+                  const current10xStatus = batchAnalysis10xStatus?.status;
 
-                  if (currentStatus === "running") {
-                    // 运行中：显示暂停和取消按钮
+                  // 优先检查10x分析状态
+                  if (current10xStatus === "running") {
+                    // 10x运行中：显示取消按钮
+                    return (
+                      <>
+                        <button
+                          onClick={handleCancel10xBatchAnalysis}
+                          disabled={isAnalyzing}
+                          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                          <X className="w-4 h-4" />
+                          取消10x分析
+                        </button>
+                      </>
+                    );
+                  } else if (currentStatus === "running") {
+                    // 普通分析运行中：显示暂停和取消按钮
                     return (
                       <>
                         <button
                           onClick={handlePauseBatchAnalysis}
-                          disabled={isAnalyzing}
+                          disabled={isAnalyzing || is10xAnalyzing}
                           className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                         >
                           <Pause className="w-4 h-4" />
@@ -495,7 +725,7 @@ export default function RepoPage() {
                         </button>
                         <button
                           onClick={handleCancelBatchAnalysis}
-                          disabled={isAnalyzing}
+                          disabled={isAnalyzing || is10xAnalyzing}
                           className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                         >
                           <X className="w-4 h-4" />
@@ -508,8 +738,16 @@ export default function RepoPage() {
                     return (
                       <>
                         <button
+                          onClick={handleResume10xBatchAnalysis}
+                          disabled={isAnalyzing || is10xAnalyzing}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                          <Play className="w-4 h-4" />
+                          10x继续分析
+                        </button>
+                        <button
                           onClick={handleResumeBatchAnalysis}
-                          disabled={isAnalyzing}
+                          disabled={isAnalyzing || is10xAnalyzing}
                           className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                         >
                           <Play className="w-4 h-4" />
@@ -541,8 +779,16 @@ export default function RepoPage() {
                     return (
                       <>
                         <button
+                          onClick={handle10xBatchAnalysis}
+                          disabled={isAnalyzing || isBatchAnalyzing}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                          <Brain className="w-4 h-4" />
+                          10x全量AI分析
+                        </button>
+                        <button
                           onClick={handleBatchAnalysis}
-                          disabled={isAnalyzing}
+                          disabled={isAnalyzing || is10xAnalyzing}
                           className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                         >
                           <Brain className="w-4 h-4" />
@@ -580,7 +826,7 @@ export default function RepoPage() {
               </div>
 
               {/* 状态消息 */}
-              {(analysisMessage || batchMessage) && (
+              {(analysisMessage || batchMessage || batch10xMessage) && (
                 <div className="flex flex-col gap-1">
                   {/* 历史数据解析消息 */}
                   {analysisMessage && (
@@ -594,6 +840,53 @@ export default function RepoPage() {
                       }`}
                     >
                       {analysisMessage}
+                    </div>
+                  )}
+
+                  {/* 10x并行AI分析消息 */}
+                  {batch10xMessage && (
+                    <div
+                      className={`text-sm px-3 py-2 rounded-lg max-w-md ${
+                        batch10xMessage.includes("失败") ||
+                        batch10xMessage.includes("错误")
+                          ? "bg-red-100 text-red-700"
+                          : batch10xMessage.includes("完成")
+                          ? "bg-green-100 text-green-700"
+                          : batch10xMessage.includes("取消")
+                          ? "bg-yellow-100 text-yellow-700"
+                          : batch10xMessage.includes("暂停")
+                          ? "bg-orange-100 text-orange-700"
+                          : batch10xMessage.includes("恢复") ||
+                            batch10xMessage.includes("继续")
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-indigo-100 text-indigo-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {is10xAnalyzing && (
+                          <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                        )}
+                        <span className="text-xs">{batch10xMessage}</span>
+                      </div>
+                      {/* 10x分析进度条 */}
+                      {batchAnalysis10xStatus &&
+                        is10xAnalyzing &&
+                        batchAnalysis10xStatus?.totalCount > 0 && (
+                          <div className="mt-2">
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div
+                                className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                                style={{
+                                  width: `${
+                                    (batchAnalysis10xStatus.processedCount /
+                                      batchAnalysis10xStatus.totalCount) *
+                                    100
+                                  }%`,
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                        )}
                     </div>
                   )}
 
