@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
     }
 
     issues.forEach(issue => {
-      const repoName = (issue as {github_repos?: {full_name: string}}).github_repos?.full_name
+      const repoName = (issue as unknown as {github_repos?: {full_name: string}}).github_repos?.full_name
       if (repoName) {
         stats.by_repo[repoName] = (stats.by_repo[repoName] || 0) + 1
       }
