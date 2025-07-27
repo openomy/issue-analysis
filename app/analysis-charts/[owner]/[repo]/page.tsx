@@ -5,6 +5,23 @@ import { useParams } from 'next/navigation'
 import { ExternalLink, BarChart3 } from 'lucide-react'
 import { IssuePRPieChart, ChartData } from '../../../../components/charts/IssuePRPieChart'
 import { WeeklyTrendChart, WeeklyData } from '../../../../components/charts/WeeklyTrendChart'
+import { MainLabelBarChart } from '../../../../components/charts/MainLabelBarChart'
+import { VersionPieChart } from '../../../../components/charts/VersionPieChart'
+import { DeploymentPieChart } from '../../../../components/charts/DeploymentPieChart'
+import { PlatformPieChart } from '../../../../components/charts/PlatformPieChart'
+
+interface LabelData {
+  name: string
+  count: number
+}
+
+interface AnalysisData {
+  mainLabels: LabelData[]
+  versionStats: LabelData[]
+  deploymentStats: LabelData[]
+  platformStats: LabelData[]
+  totalIssues: number
+}
 
 export default function AnalysisChartsPage() {
   const params = useParams()
@@ -13,8 +30,10 @@ export default function AnalysisChartsPage() {
   
   const [chartData, setChartData] = useState<ChartData | null>(null)
   const [weeklyData, setWeeklyData] = useState<WeeklyData[]>([])
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(true)
   const [weeklyLoading, setWeeklyLoading] = useState(true)
+  const [labelLoading, setLabelLoading] = useState(true)
   const [repoInfo, setRepoInfo] = useState<{html_url: string} | null>(null)
 
   const fetchChartData = useCallback(async () => {
@@ -44,6 +63,31 @@ export default function AnalysisChartsPage() {
     setWeeklyLoading(false)
   }, [owner, repo])
 
+  const fetchAnalysisData = useCallback(async () => {
+    setLabelLoading(true)
+    try {
+      const response = await fetch(`/api/open-issue-labels?repo=${owner}/${repo}`)
+      const data = await response.json()
+      
+      if (data.mainLabels || data.versionStats || data.deploymentStats || data.platformStats) {
+        const transformedData: AnalysisData = {
+          mainLabels: data.mainLabels || [],
+          versionStats: data.versionStats || [],
+          deploymentStats: data.deploymentStats || [],
+          platformStats: data.platformStats || [],
+          totalIssues: data.totalIssues || 0
+        }
+        
+        setAnalysisData(transformedData)
+      } else {
+        setAnalysisData(null)
+      }
+    } catch (error) {
+      console.error('Error fetching analysis data:', error)
+    }
+    setLabelLoading(false)
+  }, [owner, repo])
+
   const fetchRepoInfo = useCallback(async () => {
     try {
       // Try to get repository information
@@ -62,9 +106,10 @@ export default function AnalysisChartsPage() {
     if (owner && repo) {
       fetchChartData()
       fetchWeeklyData()
+      fetchAnalysisData()
       fetchRepoInfo()
     }
-  }, [owner, repo, fetchChartData, fetchWeeklyData, fetchRepoInfo])
+  }, [owner, repo, fetchChartData, fetchWeeklyData, fetchAnalysisData, fetchRepoInfo])
 
   if (loading && !chartData) {
     return (
@@ -119,17 +164,40 @@ export default function AnalysisChartsPage() {
               )}
             </div>
             
-            {/* Placeholder for future charts */}
+            {/* Main Labels Bar Chart */}
             <div className="lg:col-span-1">
-              <div className="h-full bg-white rounded-lg border border-gray-200 p-6 flex items-center justify-center text-gray-500">
-                <div className="text-center">
-                  <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                  <p className="text-lg font-medium mb-2">More Stats Coming Soon</p>
-                  <p className="text-sm text-gray-600">
-                    Additional current statistics will be added here
-                  </p>
-                </div>
-              </div>
+              <MainLabelBarChart 
+                data={analysisData?.mainLabels || []} 
+                totalIssues={analysisData?.totalIssues || 0}
+                loading={labelLoading}
+              />
+            </div>
+          </div>
+
+          {/* Analysis Charts - Three specific categories */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Version Distribution */}
+            <div className="lg:col-span-1">
+              <VersionPieChart 
+                data={analysisData?.versionStats || []}
+                loading={labelLoading}
+              />
+            </div>
+            
+            {/* Deployment Distribution */}
+            <div className="lg:col-span-1">
+              <DeploymentPieChart 
+                data={analysisData?.deploymentStats || []}
+                loading={labelLoading}
+              />
+            </div>
+            
+            {/* Platform Distribution */}
+            <div className="lg:col-span-1">
+              <PlatformPieChart 
+                data={analysisData?.platformStats || []}
+                loading={labelLoading}
+              />
             </div>
           </div>
 

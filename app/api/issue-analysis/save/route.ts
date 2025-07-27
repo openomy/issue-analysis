@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       windows: `${analysis['windows']}` === 'true',
       react_native: `${analysis['react_native']}` === 'true',
       auth: `${analysis['auth']}` === 'true',
-      macos: `${analysis['macOs']}` === 'true',
+      macos: `${analysis['macos']}` === 'true',
       cloud: `${analysis['cloud']}` === 'true',
       drawing: `${analysis['drawing']}` === 'true',
       linux: `${analysis['linux']}` === 'true',

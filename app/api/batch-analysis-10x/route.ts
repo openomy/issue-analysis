@@ -614,7 +614,7 @@ async function process10xBatchQueue(repo: string) {
         while (retryCount < maxRetries && !success) {
           try {
             // Call the issue analysis API
-            const analysisResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3004'}/api/issue-analysis`, {
+            const analysisResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/issue-analysis`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json'
@@ -632,7 +632,7 @@ async function process10xBatchQueue(repo: string) {
             const analysisResult = await analysisResponse.json()
 
             // Save the analysis result
-            const saveResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3004'}/api/issue-analysis/save`, {
+            const saveResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/issue-analysis/save`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json'
