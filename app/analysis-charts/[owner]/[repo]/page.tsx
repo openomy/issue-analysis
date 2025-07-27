@@ -9,6 +9,8 @@ import { MainLabelBarChart } from '../../../../components/charts/MainLabelBarCha
 import { VersionPieChart } from '../../../../components/charts/VersionPieChart'
 import { DeploymentPieChart } from '../../../../components/charts/DeploymentPieChart'
 import { PlatformPieChart } from '../../../../components/charts/PlatformPieChart'
+import { WeekComparisonChart } from '../../../../components/charts/WeekComparisonChart'
+import { WeekLabelsComparisonChart } from '../../../../components/charts/WeekLabelsComparisonChart'
 
 interface LabelData {
   name: string
@@ -23,6 +25,36 @@ interface AnalysisData {
   totalIssues: number
 }
 
+interface WeekComparisonData {
+  thisWeek: {
+    period_label: string
+    issues_count: number
+    prs_count: number
+    period_start: string
+    period_end: string
+  } | null
+  lastWeek: {
+    period_label: string
+    issues_count: number
+    prs_count: number
+    period_start: string
+    period_end: string
+  } | null
+}
+
+interface WeekLabelsComparisonData {
+  thisWeek: {
+    period_label: string
+    labels: LabelData[]
+    totalIssues: number
+  } | null
+  lastWeek: {
+    period_label: string
+    labels: LabelData[]
+    totalIssues: number
+  } | null
+}
+
 export default function AnalysisChartsPage() {
   const params = useParams()
   const owner = params.owner as string
@@ -31,9 +63,13 @@ export default function AnalysisChartsPage() {
   const [chartData, setChartData] = useState<ChartData | null>(null)
   const [weeklyData, setWeeklyData] = useState<WeeklyData[]>([])
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
+  const [weekComparisonData, setWeekComparisonData] = useState<WeekComparisonData | null>(null)
+  const [weekLabelsData, setWeekLabelsData] = useState<WeekLabelsComparisonData | null>(null)
   const [loading, setLoading] = useState(true)
   const [weeklyLoading, setWeeklyLoading] = useState(true)
   const [labelLoading, setLabelLoading] = useState(true)
+  const [weekComparisonLoading, setWeekComparisonLoading] = useState(true)
+  const [weekLabelsLoading, setWeekLabelsLoading] = useState(true)
   const [repoInfo, setRepoInfo] = useState<{html_url: string} | null>(null)
 
   const fetchChartData = useCallback(async () => {
@@ -88,6 +124,30 @@ export default function AnalysisChartsPage() {
     setLabelLoading(false)
   }, [owner, repo])
 
+  const fetchWeekComparisonData = useCallback(async () => {
+    setWeekComparisonLoading(true)
+    try {
+      const response = await fetch(`/api/week-comparison?repo=${owner}/${repo}`)
+      const data = await response.json()
+      setWeekComparisonData(data)
+    } catch (error) {
+      console.error('Error fetching week comparison data:', error)
+    }
+    setWeekComparisonLoading(false)
+  }, [owner, repo])
+
+  const fetchWeekLabelsData = useCallback(async () => {
+    setWeekLabelsLoading(true)
+    try {
+      const response = await fetch(`/api/week-labels-comparison?repo=${owner}/${repo}`)
+      const data = await response.json()
+      setWeekLabelsData(data)
+    } catch (error) {
+      console.error('Error fetching week labels data:', error)
+    }
+    setWeekLabelsLoading(false)
+  }, [owner, repo])
+
   const fetchRepoInfo = useCallback(async () => {
     try {
       // Try to get repository information
@@ -107,9 +167,11 @@ export default function AnalysisChartsPage() {
       fetchChartData()
       fetchWeeklyData()
       fetchAnalysisData()
+      fetchWeekComparisonData()
+      fetchWeekLabelsData()
       fetchRepoInfo()
     }
-  }, [owner, repo, fetchChartData, fetchWeeklyData, fetchAnalysisData, fetchRepoInfo])
+  }, [owner, repo, fetchChartData, fetchWeeklyData, fetchAnalysisData, fetchWeekComparisonData, fetchWeekLabelsData, fetchRepoInfo])
 
   if (loading && !chartData) {
     return (
@@ -197,6 +259,25 @@ export default function AnalysisChartsPage() {
               <PlatformPieChart 
                 data={analysisData?.platformStats || []}
                 loading={labelLoading}
+              />
+            </div>
+          </div>
+
+          {/* Weekly Comparison Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Week Count Comparison */}
+            <div className="lg:col-span-1">
+              <WeekComparisonChart 
+                data={weekComparisonData}
+                loading={weekComparisonLoading}
+              />
+            </div>
+            
+            {/* Week Labels Comparison */}
+            <div className="lg:col-span-1">
+              <WeekLabelsComparisonChart 
+                data={weekLabelsData}
+                loading={weekLabelsLoading}
               />
             </div>
           </div>

@@ -536,6 +536,7 @@ async function process10xBatchQueue(repo: string) {
         }
 
         const status = safeJsonParse(statusData) as {
+          endTime: string
           status: string
           totalCount: number
           processedCount: number
