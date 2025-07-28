@@ -522,7 +522,7 @@ async function process10xBatchQueue(repo: string) {
   const delayBetweenRequests = 500 // 0.5 second delay between API calls
   const concurrency = 50 // 10 parallel workers
   let activeWorkers = 0
-  let shouldStop = false
+  const shouldStop = false
 
   // Worker function to process a single issue
   const processIssue = async (workerId: number): Promise<void> => {

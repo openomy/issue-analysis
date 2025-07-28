@@ -178,7 +178,7 @@ export async function GET(request: NextRequest) {
     const top5Versions = allVersionStats.slice(0, 5)
     const otherVersions = allVersionStats.slice(5)
     
-    let versionStats = top5Versions
+    const versionStats = top5Versions
     if (otherVersions.length > 0) {
       const othersCount = otherVersions.reduce((sum, version) => sum + version.count, 0)
       versionStats.push({

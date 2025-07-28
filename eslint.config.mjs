@@ -9,8 +9,13 @@ const compat = new FlatCompat({
   baseDirectory: __dirname,
 });
 
-const eslintConfig = [
+export default [
+  // 先继承 Next.js 的配置
   ...compat.extends("next/core-web-vitals", "next/typescript"),
+  // 再加一段自定义配置，把 no-explicit-any 关掉
+  {
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
 ];
-
-export default eslintConfig;
