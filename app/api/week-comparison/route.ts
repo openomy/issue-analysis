@@ -8,14 +8,14 @@ export interface WeekComparisonData {
     prs_count: number
     period_start: string
     period_end: string
-  }
+  } | null,
   lastWeek: {
     period_label: string
     issues_count: number
     prs_count: number
     period_start: string
     period_end: string
-  }
+  }| null,
 }
 
 export async function GET(request: NextRequest) {
